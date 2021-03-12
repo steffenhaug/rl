@@ -6,7 +6,8 @@
 
 #include "rl.h"
 
-// Backup of terminal state before entering raw mode.
+// Backup of terminal state so we can restore the
+// old settings when we exit our program.
 struct termios old_term_state;
 
 // Text buffer for the input line.
@@ -15,6 +16,34 @@ char BUF[BUF_SIZE];
 
 // A line to perform edit operations on the input.
 struct line input = { BUF, BUF };
+
+void delete(size_t n)
+{
+    // Move every character to the right of the
+    // cursor one step to the left.
+    char *del_cursor = input.cursor;
+    do {
+        *del_cursor = *(del_cursor + n);
+    } while (*del_cursor++);
+}
+
+void insert(char c)
+{
+    // Make a new temporary cursor.
+    char *ins_cursor = input.cursor;
+
+    // Seek null terminal with the cursor.
+    while (*ins_cursor++);
+
+    // Go backwards, moving all characters to the
+    // right of our actual cursor one step right.
+    do {
+        *ins_cursor = *(ins_cursor - 1);
+    } while ((--ins_cursor) - input.cursor);
+
+    // Put our character in.
+    *(input.cursor++) = c;
+}
 
 void ansi_ctrl_seq()
 {
@@ -26,7 +55,7 @@ void ansi_ctrl_seq()
 
     // 0x5B ('[') indicates start of control sequence.
     if (getchar() == 0x5B) {
-        // Assume no parameter bytes. (For now)
+        // Assume no parameter bytes.
         switch (getchar()) {
           case 'A': /* Up   */ break;
           case 'B': /* Down */ break;
@@ -67,35 +96,6 @@ void render_line()
     }
 }
 
-void delete() {
-    // Move cursor left.
-    --input.cursor;
-
-    // Move every character to the right of the
-    // cursor one step to the left.
-    char *del_cursor = input.cursor;
-    do {
-        *del_cursor = *(del_cursor + 1);
-    } while (*del_cursor++);
-}
-
-void insert(char c) {
-    // Make a new temporary cursor.
-    char *ins_cursor = input.cursor;
-
-    // Seek null terminal with the cursor.
-    while (*ins_cursor++);
-
-    // Go backwards, moving all characters to the
-    // right of our actual cursor one step right.
-    while (ins_cursor - input.cursor) {
-        *ins_cursor = *(ins_cursor - 1);
-        ins_cursor--;
-    }
-
-    // Put our character in.
-    *(input.cursor++) = c;
-}
 
 char *readln(const char *prompt, void (*tab)(struct line*))
 {
@@ -125,7 +125,8 @@ char *readln(const char *prompt, void (*tab)(struct line*))
         } else if (c == 0x7F) {
             // Backspace
             if (input.cursor - input.buf) {
-                delete();
+                input.cursor--;
+                delete(1);
             }
         } else if (c == '\t'){
             // Tab
