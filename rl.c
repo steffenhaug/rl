@@ -2,19 +2,49 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <stdlib.h>
 
+#include "rl.h"
+
+// Backup of terminal state before entering raw mode.
+struct termios old_term_state;
+
+// Text buffer for the input line.
 const size_t BUF_SIZE = 512;
 char BUF[BUF_SIZE];
-char *CURSOR = BUF;
 
-char* readln(const char* prompt) {
+struct line input = { BUF, BUF };
+
+void ansi_escape()
+{
+    // ANSI escape has been read.
+    // If we discover an unsupported escape sequence,
+    // the safe thing to do is exit, since there may
+    // be a partial sequence left in the input which
+    // would not be read correctly if we procceed.
+    if (0x5B == getchar()) {
+        // 0x5B indicates start of control sequence.
+        switch (getchar()) {
+          case 'A': /* Up    */ break;
+          case 'B': /* Down  */ break;
+          case 'C': /* Right */ break;
+          case 'D': /* Left  */ break;
+          default:
+            exit(1);
+        }
+    } else {
+        exit(1);
+    }
+}
+
+char *readln(const char *prompt, void (*tab)(struct line*))
+{
     // Read a sequence of characters from stdin
     // terminated by a newline character. Supports
     // line editing.
 
     // Print the prompt.
     printf("%s", prompt);
-    fflush(stdout);
 
     // Read a line character by character.
     char c;
@@ -22,31 +52,32 @@ char* readln(const char* prompt) {
         if (c == '\n') {
             // Newline; terminate the string and
             // reset the cursor back to start.
-            *CURSOR = 0;
-            CURSOR = BUF;
+            *input.cursor = 0;
+            input.cursor = input.buf;
             putchar('\n');
-            return BUF;
+            return input.buf;
         } else if (c == '\r') {
             // Ignore carrige return.
             continue;
-        } else if (c == 0x7f) {
+        } else if (c == 0x7F) {
             // Backspace
-            if (CURSOR - BUF) {
+            if (input.cursor - input.buf) {
                 printf("\b \b");
-                CURSOR--;
+                input.cursor--;
             }
         } else if (c == '\t'){
-            // Tab (call autocomplete function :D)
+            // Tab
+            tab(&input);
         } else if (c == 4 || c == 3) {
             // Ctrl-D or Ctrl-C respectively.
             break;
         } else if (c == 0x1B) {
             // Start of ansi escape code.
-            printf("ANSI escape codes in the input is not supported yet.");
+            ansi_escape();
         } else {
             // The normal case: Any character.
             // Put it in the buffer and echo it.
-            *CURSOR++ = c;
+            *input.cursor++ = c;
             putchar(c);
         }
     }
@@ -57,39 +88,26 @@ char* readln(const char* prompt) {
     return NULL;
 }
 
-void repl() {
-    // Simple read loop to demonstrate line editor.
-    for (;;) {
-        // Read a line.
-        char* line = readln("$ ");
-        if (line) {
-            // If we got a line back, echo it.
-            printf("(echo)%s\n", line);
-        } else {
-            // Otherwise exit.
-            printf("\nGoodbye!\n");
-            return;
-        }
-    }
+void restore_old_term_state()
+{
+    // Re-apply the saved state.
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &old_term_state);
 }
 
-int main() {
-    struct termios tp, save;
-
-    // Get the termios state, and save a backup.
-    tcgetattr(STDIN_FILENO, &tp);
-    save = tp;
-
-    // Disable echoing, and enable non-canonical mode so
-    // we can provide our own editing facilities.
-    tp.c_lflag &= ~(ECHO | ICANON | ISIG | IEXTEN);
-    tp.c_iflag &= ~(IXON);
-    tcsetattr(STDIN_FILENO, TCSAFLUSH, &tp);
-
-    repl();
+void raw_mode()
+{
+    // Register restoring terminal settings on exit.
+    atexit(restore_old_term_state);
     
-    // Re-apply the saved state.
-    tcsetattr(STDIN_FILENO, TCSAFLUSH, &save);
+    // Get the terminal state, and save a backup.
+    struct termios ts;
+    tcgetattr(STDIN_FILENO, &ts);
+    old_term_state = ts;
 
-    return 0;
+    // Disable echoing, and enter raw-mode by leaving
+    // canon mode (line mode) and disabling process
+    // management hotkeys like Ctrl-C and Ctrl-S.
+    ts.c_lflag &= ~(ECHO | ICANON | ISIG | IEXTEN);
+    ts.c_iflag &= ~(IXON);
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &ts);
 }
