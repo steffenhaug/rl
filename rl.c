@@ -39,20 +39,23 @@ void ansi_escape()
 
 char *readln(const char *prompt, void (*tab)(struct line*))
 {
-    // Read a sequence of characters from stdin
-    // terminated by a newline character. Supports
-    // line editing.
+    // We maintain the invariant that the string in 
+    // the buffer is always null-terminated. Before
+    // we read a character, the text is only a zero
+    // byte.
+    *input.buf = 0;
 
-    // Print the prompt.
-    printf("%s", prompt);
+    // Loop to get characters and update buffer.
+    for (;;) {
+        // Render the line with prompt.
+        printf("\xD%s%s\x1B[J", prompt, input.buf);
 
-    // Read a line character by character.
-    char c;
-    while ((c = getchar())) {
+        // Get input and update line.
+        char c = getchar();
+
         if (c == '\n') {
             // Newline; terminate the string and
             // reset the cursor back to start.
-            *input.cursor = 0;
             input.cursor = input.buf;
             putchar('\n');
             return input.buf;
@@ -62,8 +65,7 @@ char *readln(const char *prompt, void (*tab)(struct line*))
         } else if (c == 0x7F) {
             // Backspace
             if (input.cursor - input.buf) {
-                printf("\b \b");
-                input.cursor--;
+                *(--input.cursor) = 0;
             }
         } else if (c == '\t'){
             // Tab
@@ -78,6 +80,7 @@ char *readln(const char *prompt, void (*tab)(struct line*))
             // The normal case: Any character.
             // Put it in the buffer and echo it.
             *input.cursor++ = c;
+            *input.cursor   = 0;
             putchar(c);
         }
     }
