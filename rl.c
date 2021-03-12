@@ -13,28 +13,88 @@ struct termios old_term_state;
 const size_t BUF_SIZE = 512;
 char BUF[BUF_SIZE];
 
+// A line to perform edit operations on the input.
 struct line input = { BUF, BUF };
 
-void ansi_escape()
+void ansi_ctrl_seq()
 {
-    // ANSI escape has been read.
+    // ANSI escape (0x1B) has been read.
     // If we discover an unsupported escape sequence,
     // the safe thing to do is exit, since there may
     // be a partial sequence left in the input which
     // would not be read correctly if we procceed.
-    if (0x5B == getchar()) {
-        // 0x5B indicates start of control sequence.
+
+    // 0x5B ('[') indicates start of control sequence.
+    if (getchar() == 0x5B) {
+        // Assume no parameter bytes. (For now)
         switch (getchar()) {
-          case 'A': /* Up    */ break;
-          case 'B': /* Down  */ break;
-          case 'C': /* Right */ break;
-          case 'D': /* Left  */ break;
+          case 'A': /* Up   */ break;
+          case 'B': /* Down */ break;
+          case 'C':
+            if (*input.cursor) {
+                input.cursor++;
+            }
+            break;
+          case 'D':
+            if (input.cursor - input.buf) {
+                input.cursor--;
+            }
+            break;
           default:
             exit(1);
         }
     } else {
         exit(1);
     }
+}
+
+void render_line()
+{
+    // Renders the input line using ANSI escape
+    // codes to position  the terminals  cursor
+    // in the same position as the line editors
+    // cursor in the buffer.
+
+    printf("\x1B[s"); // Save cursor position
+    printf("%s", input.buf);
+    printf("\x1B[J"); // Clear to end of line
+    printf("\x1B[u"); // Restore the position
+
+    // If the cursor is not in the start of the
+    // buffer, move it forward as far as needed.
+    if (input.cursor - input.buf) {
+        printf("\x1B[%luC", input.cursor - input.buf);
+    }
+}
+
+void delete() {
+    // Move cursor left.
+    --input.cursor;
+
+    // Move every character to the right of the
+    // cursor one step to the left.
+    char *del_cursor = input.cursor;
+    do {
+        *del_cursor = *(del_cursor + 1);
+    } while (*del_cursor++);
+}
+
+void insert(char c) {
+    // Make a new temporary cursor.
+    char *ins_cursor = input.cursor;
+
+    // Seek null terminal with the cursor.
+    while (*ins_cursor++);
+
+    // Go backwards, moving all characters to the
+    // right of our actual cursor one step right.
+    while (ins_cursor - input.cursor) {
+        *ins_cursor = *(ins_cursor - 1);
+        ins_cursor--;
+    }
+
+    // Put our character in.
+    *(input.cursor++) = c;
 }
 
 char *readln(const char *prompt, void (*tab)(struct line*))
@@ -48,13 +108,13 @@ char *readln(const char *prompt, void (*tab)(struct line*))
     // Loop to get characters and update buffer.
     for (;;) {
         // Render the line with prompt.
-        printf("\xD%s%s\x1B[J", prompt, input.buf);
+        printf("\xD%s", prompt);
+        render_line();
 
         // Get input and update line.
         char c = getchar();
 
         if (c == '\n') {
-            // Newline; terminate the string and
             // reset the cursor back to start.
             input.cursor = input.buf;
             putchar('\n');
@@ -65,7 +125,7 @@ char *readln(const char *prompt, void (*tab)(struct line*))
         } else if (c == 0x7F) {
             // Backspace
             if (input.cursor - input.buf) {
-                *(--input.cursor) = 0;
+                delete();
             }
         } else if (c == '\t'){
             // Tab
@@ -75,13 +135,11 @@ char *readln(const char *prompt, void (*tab)(struct line*))
             break;
         } else if (c == 0x1B) {
             // Start of ansi escape code.
-            ansi_escape();
+            ansi_ctrl_seq();
         } else {
             // The normal case: Any character.
             // Put it in the buffer and echo it.
-            *input.cursor++ = c;
-            *input.cursor   = 0;
-            putchar(c);
+            insert(c);
         }
     }
 
