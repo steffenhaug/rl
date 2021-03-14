@@ -11,7 +11,7 @@
 struct termios old_term_state;
 
 // Text buffer for the input line.
-const size_t BUF_SIZE = 1024;
+#define BUF_SIZE 1024
 char BUF[BUF_SIZE];
 
 // A line to perform edit operations on the input.
