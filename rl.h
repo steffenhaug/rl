@@ -1,3 +1,5 @@
+#ifndef RL_H
+#define RL_H
 // A line to edit.
 struct line {
     char *const buf;
@@ -15,3 +17,4 @@ char *readln(
 // Put the terminal into raw mode so we can provide
 // our own editing facilities.
 void raw_mode();
+#endif
