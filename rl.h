@@ -17,4 +17,5 @@ char *readln(
 // Put the terminal into raw mode so we can provide
 // our own editing facilities.
 void raw_mode();
+void restore_old_term_state();
 #endif

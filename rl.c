@@ -103,6 +103,7 @@ char *readln(const char *prompt, void (*tab)(struct line*))
     // the buffer is always null-terminated. Before
     // we read a character, the text is only a zero
     // byte.
+    raw_mode();
     *input.buf = 0;
 
     // Loop to get characters and update buffer.
@@ -118,6 +119,7 @@ char *readln(const char *prompt, void (*tab)(struct line*))
             // reset the cursor back to start.
             input.cursor = input.buf;
             putchar('\n');
+            restore_old_term_state();
             return input.buf;
         } else if (c == '\r') {
             // Ignore carrige return.
@@ -149,6 +151,7 @@ char *readln(const char *prompt, void (*tab)(struct line*))
     // If we exit the loop any other way than seeing a
     // newline character, we have not read a line; so
     // we return NULL.
+    restore_old_term_state();
     return NULL;
 }
 
