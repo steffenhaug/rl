@@ -130,7 +130,9 @@ char *readln(const char *prompt, void (*tab)(struct line*))
             }
         } else if (c == '\t'){
             // Tab
-            tab(&input);
+            if (tab != NULL) {
+                tab(&input);
+            }
         } else if (c == 4 || c == 3) {
             // Ctrl-D or Ctrl-C respectively.
             break;
