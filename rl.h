@@ -14,6 +14,9 @@ char *readln(
     void (*tab)(struct line*)
 );
 
+void insert(char c);
+void delete();
+
 // Put the terminal into raw mode so we can provide
 // our own editing facilities.
 void raw_mode();
