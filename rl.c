@@ -141,6 +141,10 @@ char *readln(const char *prompt, void (*tab)(struct line*))
         } else if (c == 0x1B) {
             // Start of ansi escape code.
             ansi_ctrl_seq();
+        } else if (c == EOF) {
+            // We were reading from input redirected
+            // file, and are now at the end.
+            break;
         } else {
             // The normal case: Any character.
             // Put it in the buffer and echo it.
@@ -149,7 +153,7 @@ char *readln(const char *prompt, void (*tab)(struct line*))
     }
 
     // If we exit the loop any other way than seeing a
-    // newline character, we have not read a line; so
+    // newline character, we have not read a line, so
     // we return NULL.
     restore_old_term_state();
     return NULL;
